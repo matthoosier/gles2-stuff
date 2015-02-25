@@ -75,7 +75,8 @@ struct window {
 	struct display *display;
 	struct geometry geometry, window_size;
 	struct {
-		GLuint u_rotation;
+		GLuint u_model;
+		GLuint u_view;
 		GLuint u_projection;
 		GLuint u_light_pos;
 		GLuint u_ambient;
@@ -94,7 +95,8 @@ struct window {
 };
 
 static const char *vert_shader_text =
-        "uniform mat4 u_rotation;\n"
+        "uniform mat4 u_model;\n"
+	"uniform mat4 u_view;\n"
 	"uniform mat4 u_projection;\n"
 
 	"attribute vec4 a_pos;\n"
@@ -106,10 +108,9 @@ static const char *vert_shader_text =
 	"varying vec4 v_pos;\n"
 
 	"void main() {\n"
-	"  gl_Position = u_rotation * a_pos;\n"
-	"  v_pos = gl_Position;\n"
-	"  v_norm = u_rotation * normalize(a_norm);\n"
-        "  gl_Position *= u_projection;\n"
+	"  gl_Position = u_projection * u_view * u_model * a_pos;\n"
+	"  v_pos = u_view * u_model * a_pos;\n"
+	"  v_norm = u_model * normalize(a_norm);\n"
 	"  v_color = a_color;\n"
 	"}\n";
 
@@ -255,8 +256,11 @@ init_gl(struct window *window)
 
 	glUseProgram(program);
 
-	window->gl.u_rotation =
-		glGetUniformLocation(program, "u_rotation");
+	window->gl.u_model =
+		glGetUniformLocation(program, "u_model");
+
+	window->gl.u_view =
+		glGetUniformLocation(program, "u_view");
 
 	window->gl.u_projection =
 		glGetUniformLocation(program, "u_projection");
@@ -532,16 +536,38 @@ redraw(void *data, struct wl_callback *callback, uint32_t time)
 
 	glViewport(0, 0, window->geometry.width, window->geometry.height);
 
-	glm::mat4 u_rotation = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(1.0f));
+	// Axes
+	glm::vec3 left(1.f, 0.f, 0.f);
+	glm::vec3 up(0.f, 1.f, 0.f);
+	glm::vec3 near(0.f, 0.f, 1.f);
+
+	// Rotation matrix. Use different primes to avoid gimbal lock.
+	glm::mat4 u_model = glm::rotate(glm::mat4(1.0f), float(angle * 3. / 10), up)
+	                  * glm::rotate(glm::mat4(1.0f), float(angle), left)
+	                  * glm::rotate(glm::mat4(1.0f), float(angle * 7. / 10), near);
+
+#if 0
+	glm::mat4 u_view = glm::translate(glm::mat4(1.f), glm::vec3(0.0, 0.0, -1 * sqrt(3)));
+
 	// Simple orthographic projection just barely large enough
 	// to be a bounding box on the radius of the vertices
 	glm::mat4 u_projection = glm::ortho(-sqrt(3), sqrt(3),
 	                                    -sqrt(3), sqrt(3),
-	                                    -sqrt(3), sqrt(3));
+	                                    (double)(-2 * sqrt(3)), (double)(+2 * sqrt(3)));
+#else
+	// Simple frustum whose front pane is from (-1.5, 1.5 * aspectRatio) to
+	// (1.5, -1.5 * aspectRatio) on the z=4.5 and whose back pane is on the
+	// z=10.0 plane.
+	glm::mat4 u_view = glm::translate(glm::mat4(1.f), glm::vec3(0.0, 0.0, -7.0));
+	float aspectRatio = window->geometry.width * 1.0f / window->geometry.height;
+	glm::mat4 u_projection = glm::frustum(-1.5 * aspectRatio, 1.5 * aspectRatio, 1.5, -1.5, 4.5, 10.0);
+#endif
 
-	glm::vec4 u_light_pos = glm::vec4(10.0, 10.0, 10.0, 1);
+	glm::vec4 u_light_pos = glm::vec4(10.0, 10.0, +10.0, 1);
 
-	glUniformMatrix4fv(window->gl.u_rotation, 1, GL_FALSE, glm::value_ptr(u_rotation));
+	glUniformMatrix4fv(window->gl.u_model, 1, GL_FALSE, glm::value_ptr(u_model));
+
+	glUniformMatrix4fv(window->gl.u_view, 1, GL_FALSE, glm::value_ptr(u_view));
 
 	glUniformMatrix4fv(window->gl.u_projection, 1, GL_FALSE, glm::value_ptr(u_projection));
 
