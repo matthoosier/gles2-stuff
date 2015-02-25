@@ -9,10 +9,15 @@ def configure(conf):
 	conf.check_cfg(package='glesv2', args=['--cflags', '--libs'], uselib_store='GLESV2')
 	conf.check_cfg(package='egl', args=['--cflags', '--libs'], uselib_store='EGL')
 
+	conf.env.INCLUDES_GLM = conf.path.make_node('glm-repo').abspath()
+
 def build(bld):
 	bld.program(target='simple-egl', source='simple-egl.cc',
 	            use='WAYLAND_EGL WAYLAND_CURSOR WAYLAND_CLIENT GLESV2 EGL',
 	            lib='m')
 	bld.program(target='icosahedron', source='icosahedron.cc',
 	            use='WAYLAND_EGL WAYLAND_CURSOR WAYLAND_CLIENT GLESV2 EGL',
+	            lib='m')
+	bld.program(target='cube', source='cube.cc',
+	            use='WAYLAND_EGL WAYLAND_CURSOR WAYLAND_CLIENT GLESV2 EGL GLM',
 	            lib='m')

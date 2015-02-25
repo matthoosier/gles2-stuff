@@ -1,3 +1,6 @@
 [submodule "waf-repo"]
 	path = waf-repo
 	url = https://code.google.com/p/waf/
+[submodule "glm-repo"]
+	path = glm-repo
+	url = https://github.com/g-truc/glm.git
