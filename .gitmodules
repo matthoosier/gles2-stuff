@@ -1,0 +1,3 @@
+[submodule "waf-repo"]
+	path = waf-repo
+	url = https://code.google.com/p/waf/
