@@ -1,8 +1,13 @@
 #include <assert.h>
 #include <cstdio>
+#include <cstring>
+#include <getopt.h>
+#include <stdlib.h>
 #include <string>
 #include <unistd.h>
-#include <stdlib.h>
+
+#include <linux/input.h>
+
 #include "base.hpp"
 
 const struct wl_registry_listener WaylandWindow::s_registryListener = {
@@ -24,13 +29,32 @@ const struct wl_shell_surface_listener WaylandWindow::s_shellSurfaceListener = {
     &WaylandWindow::handlePopupDone,
 };
 
+const struct wl_seat_listener WaylandWindow::s_seatListener = {
+    &WaylandWindow::handleSeatCapabilities,
+    &WaylandWindow::handleSeatName,
+};
+
+const struct wl_keyboard_listener WaylandWindow::s_keyboardListener = {
+    &WaylandWindow::handleKeyboardKeymap,
+    &WaylandWindow::handleKeyboardEnter,
+    &WaylandWindow::handleKeyboardLeave,
+    &WaylandWindow::handleKeyboardKey,
+    &WaylandWindow::handleKeyboardModifiers,
+    &WaylandWindow::handleKeyboardRepeatInfo,
+};
+
 WaylandWindow::WaylandWindow()
     : m_display(NULL)
     , m_registry(NULL)
     , m_compositor(NULL)
     , m_shell(NULL)
+    , m_seat(NULL)
+    , m_keyboard(NULL)
     , m_configured(false)
     , m_callback(NULL)
+    , m_nonFullscreenSize(1, 1)
+    , m_currentSize(1, 1)
+    , m_fullscreen(false)
 {
 }
 
@@ -38,10 +62,61 @@ WaylandWindow::~WaylandWindow()
 {
 }
 
+static void print_usage(FILE* stream, char* const argv[])
+{
+    fprintf(stream, "Usage: %s [-h] [-f]\n", argv[0]);
+}
+
+static WaylandWindow::Size parseSize(char const* value)
+{
+    if (strchr(value, 'x') && strchr(value, 'x') == strrchr(value, 'x')) {
+    } else {
+        throw std::exception();
+    }
+
+    size_t len = strchr(value, 'x') - value + 1;
+
+    char* width_str = new char[len + 1];
+    width_str[len] = '\0';
+    strncpy(width_str, value, len);
+
+    WaylandWindow::Size size(atoi(width_str), atoi(&strrchr(value, 'x')[1]));
+    return size;
+}
+
 void WaylandWindow::init(int* argc, char* argv[])
 {
-    m_width = 250;
-    m_height = 250;
+    m_nonFullscreenSize = m_currentSize = Size(250, 250);
+
+    int opt;
+    while ((opt = getopt(*argc, argv, "fg:h")) != -1) {
+        switch (opt) {
+            case 'f':
+                m_fullscreen = true;
+                break;
+
+            case 'g':
+                try {
+                    m_nonFullscreenSize = m_currentSize = parseSize(optarg);
+                }
+                catch (std::exception) {
+                    fprintf(stderr, "Bad geometry specification \"%s\"\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+                break;
+
+            case 'h':
+                print_usage(stdout, argv);
+                exit(EXIT_SUCCESS);
+                break;
+
+            default:
+                print_usage(stderr, argv);
+                fprintf(stderr, "Unrecognized option '%c'.\n", optopt);
+                exit(EXIT_FAILURE);
+                break;
+        }
+    }
 
     m_display = wl_display_connect(NULL);
     assert(m_display);
@@ -141,22 +216,42 @@ void WaylandWindow::init(int* argc, char* argv[])
 
     wl_shell_surface_add_listener(m_shellSurface, &s_shellSurfaceListener, this);
 
-    m_eglWindow = wl_egl_window_create(m_surface, m_width, m_height);
+    m_eglWindow = wl_egl_window_create(m_surface,
+                                       m_currentSize.m_width,
+                                       m_currentSize.m_height);
     m_eglSurface = eglCreateWindowSurface(m_eglDisplay, m_eglConfig, m_eglWindow, NULL);
 
-    wl_shell_surface_set_title(m_shellSurface, "blah");
-    wl_shell_surface_set_toplevel(m_shellSurface);
-    handleConfigure(this, m_shellSurface, 0, m_width, m_height);
-
-    struct wl_callback* callback;
-    callback = wl_display_sync(m_display);
-    wl_callback_add_listener(callback, &s_configureCallbackListener, this);
+    setFullscreen(m_fullscreen);
 
     ret = eglMakeCurrent(m_eglDisplay, m_eglSurface,
                          m_eglSurface, m_eglContext);
     assert(ret);
 
     setupGl();
+}
+
+void WaylandWindow::setFullscreen(bool fullscreen)
+{
+    m_fullscreen = fullscreen;
+    m_configured = false;
+
+    if (fullscreen) {
+        wl_shell_surface_set_fullscreen(m_shellSurface,
+                                        WL_SHELL_SURFACE_FULLSCREEN_METHOD_DEFAULT,
+                                        0,
+                                        NULL);
+    }
+    else {
+        wl_shell_surface_set_title(m_shellSurface, "blah");
+        wl_shell_surface_set_toplevel(m_shellSurface);
+        handleConfigure(this, m_shellSurface, 0,
+                        m_nonFullscreenSize.m_width,
+                        m_nonFullscreenSize.m_height);
+    }
+
+    struct wl_callback* callback;
+    callback = wl_display_sync(m_display);
+    wl_callback_add_listener(callback, &s_configureCallbackListener, this);
 }
 
 void WaylandWindow::handleRegistryGlobal(
@@ -182,12 +277,99 @@ void WaylandWindow::handleRegistryGlobal(
                 &wl_shell_interface,
                 1);
     }
+    else if (std::string("wl_seat") == interface) {
+        self->m_seat = (struct wl_seat*)wl_registry_bind(
+                registry,
+                name,
+                &wl_seat_interface,
+                1);
+        wl_seat_add_listener(self->m_seat, &s_seatListener, self);
+    }
 }
 
 void WaylandWindow::handleRegistryGlobalRemove(
         void* data,
         struct wl_registry* registry,
         uint32_t name)
+{
+}
+
+void WaylandWindow::handleSeatCapabilities(
+        void* data,
+        struct wl_seat* seat,
+        uint32_t caps)
+{
+    WaylandWindow* self = static_cast<WaylandWindow*>(data);
+
+    if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !self->m_keyboard) {
+        self->m_keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(self->m_keyboard, &self->s_keyboardListener, self);
+    }
+    else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && self->m_keyboard) {
+        wl_keyboard_destroy(self->m_keyboard);
+        self->m_keyboard = NULL;
+    }
+}
+
+void WaylandWindow::handleSeatName(
+        void* data,
+        struct wl_seat* seat,
+        char const* name)
+{
+}
+
+void WaylandWindow::handleKeyboardKeymap(void *data,
+                                         struct wl_keyboard* keyboard,
+                                         uint32_t format,
+                                         int32_t fd,
+                                         uint32_t size)
+{
+}
+
+void WaylandWindow::handleKeyboardEnter(void* data,
+                                        struct wl_keyboard* keyboard,
+                                        uint32_t serial,
+                                        struct wl_surface* surface,
+                                        struct wl_array* keys)
+{
+}
+
+void WaylandWindow::handleKeyboardLeave(void* data,
+                                        struct wl_keyboard* keyboard,
+                                        uint32_t serial,
+                                        struct wl_surface* surface)
+{
+}
+
+void WaylandWindow::handleKeyboardKey(void* data,
+                                      struct wl_keyboard* keyboard,
+                                      uint32_t serial,
+                                      uint32_t time,
+                                      uint32_t key,
+                                      uint32_t state)
+
+{
+    WaylandWindow* self = static_cast<WaylandWindow*>(data);
+
+    if (key == KEY_F11 && state) {
+        self->setFullscreen(!self->m_fullscreen);
+    }
+}
+
+void WaylandWindow::handleKeyboardModifiers(void* data,
+                                            struct wl_keyboard* keyboard,
+                                            uint32_t serial,
+                                            uint32_t mods_depressed,
+                                            uint32_t mods_latched,
+                                            uint32_t mods_locked,
+                                            uint32_t group)
+{
+}
+
+void WaylandWindow::handleKeyboardRepeatInfo(void* data,
+                                             struct wl_keyboard* keyboard,
+                                             int32_t rate,
+                                             int32_t delay)
 {
 }
 
@@ -220,8 +402,11 @@ void WaylandWindow::handleConfigure(
         wl_egl_window_resize(self->m_eglWindow, width, height, 0, 0);
     }
 
-    self->m_width = width;
-    self->m_height = height;
+    self->m_currentSize = Size(width, height);
+
+    if (!self->m_fullscreen) {
+        self->m_nonFullscreenSize = self->m_currentSize;
+    }
 }
 
 void WaylandWindow::handlePing(void* data,

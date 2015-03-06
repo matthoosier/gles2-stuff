@@ -11,35 +11,55 @@
 class WaylandWindow
 {
 public:
+    struct Size
+    {
+        Size(uint32_t width, uint32_t height)
+            : m_width(width)
+            , m_height(height)
+        {
+        }
+
+        uint32_t m_width;
+        uint32_t m_height;
+    };
+
+public:
     WaylandWindow();
     virtual ~WaylandWindow();
 
     void init(int* argc, char* argv[]);
     void run();
 
+// Override these
+protected:
     virtual void setupGl() = 0;
     virtual void drawGl(uint32_t time) = 0;
     virtual void teardownGl() = 0;
-
-protected:
-    GLuint createShader(std::string const& shaderText, GLenum shaderType);
-
-    int width() { return m_width; }
-    int height() { return m_height; }
 
     virtual std::vector<EGLint> requiredEglConfigAttribs() {
         return std::vector<EGLint>();
     }
 
+// Internal API
+protected:
+    GLuint createShader(std::string const& shaderText, GLenum shaderType);
+
+    Size const& nonFullscreenSize() const   { return m_nonFullscreenSize; }
+    Size const& currentSize() const         { return m_currentSize; }
+
+    void setFullscreen(bool fullscreen);
+
 private:
     void redraw(struct wl_callback* callback, uint32_t time);
-    
+
 private:
     // Server interfaces
     struct wl_display* m_display;
     struct wl_registry* m_registry;
     struct wl_compositor* m_compositor;
     struct wl_shell* m_shell;
+    struct wl_seat* m_seat;
+    struct wl_keyboard* m_keyboard;
 
     // Callbacks
     static void handleRegistryGlobal(void* data, struct wl_registry* registry,
@@ -70,11 +90,55 @@ private:
     static void handlePopupDone(void* data,
                                 struct wl_shell_surface* shell_surface);
 
+    static void handleSeatCapabilities(void* data,
+                                       struct wl_seat* seat,
+                                       uint32_t capabilities);
+
+    static void handleSeatName(void* data,
+                               struct wl_seat* seat,
+                               char const* name);
+
+    static void handleKeyboardKeymap(void *data,
+                                     struct wl_keyboard* keyboard,
+                                     uint32_t format,
+                                     int32_t fd,
+                                     uint32_t size);
+
+    static void handleKeyboardEnter(void *data,
+                                    struct wl_keyboard* keyboard,
+                                    uint32_t serial,
+                                    struct wl_surface* surface,
+                                    struct wl_array* keys);
+
+    static void handleKeyboardLeave(void *data,
+                                    struct wl_keyboard* keyboard,
+                                    uint32_t serial,
+                                    struct wl_surface* surface);
+
+    static void handleKeyboardKey(void *data, struct wl_keyboard* keyboard,
+                                  uint32_t serial, uint32_t time,
+                                  uint32_t key, uint32_t state);
+
+    static void handleKeyboardModifiers(void* data,
+                                        struct wl_keyboard* keyboard,
+                                        uint32_t serial,
+                                        uint32_t mods_depressed,
+                                        uint32_t mods_latched,
+                                        uint32_t mods_locked,
+                                        uint32_t group);
+
+    static void handleKeyboardRepeatInfo(void* data,
+                                         struct wl_keyboard* keyboard,
+                                         int32_t rate,
+                                         int32_t delay);
+
     // Callback table structures
     static const struct wl_registry_listener s_registryListener;
     static const struct wl_callback_listener s_configureCallbackListener;
     static const struct wl_callback_listener s_frameCallbackListener;
     static const struct wl_shell_surface_listener s_shellSurfaceListener;
+    static const struct wl_seat_listener s_seatListener;
+    static const struct wl_keyboard_listener s_keyboardListener;
 
     // Client objects
     struct wl_surface* m_surface;
@@ -88,8 +152,9 @@ private:
     struct wl_callback* m_callback;
 
     // Random data
-    int m_width;
-    int m_height;
+    Size m_nonFullscreenSize;
+    Size m_currentSize;
+    bool m_fullscreen;
 };
 
 #endif

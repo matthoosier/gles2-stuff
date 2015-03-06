@@ -78,7 +78,7 @@ public:
         rotation[1][0] = -sin(angle);
         rotation[1][1] = cos(angle);
 
-        glViewport(0, 0, width(), height());
+        glViewport(0, 0, currentSize().m_width, currentSize().m_height);
         glClearColor(0, 0, 0, 0.5);
         glClear(GL_COLOR_BUFFER_BIT);
 
