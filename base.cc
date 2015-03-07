@@ -43,6 +43,14 @@ const struct wl_keyboard_listener WaylandWindow::s_keyboardListener = {
     &WaylandWindow::handleKeyboardRepeatInfo,
 };
 
+const struct wl_pointer_listener WaylandWindow::s_pointerListener = {
+    &WaylandWindow::handlePointerEnter,
+    &WaylandWindow::handlePointerLeave,
+    &WaylandWindow::handlePointerMotion,
+    &WaylandWindow::handlePointerButton,
+    &WaylandWindow::handlePointerAxis,
+};
+
 static bool s_running = true;
 
 WaylandWindow::WaylandWindow()
@@ -52,6 +60,7 @@ WaylandWindow::WaylandWindow()
     , m_shell(NULL)
     , m_seat(NULL)
     , m_keyboard(NULL)
+    , m_pointer(NULL)
     , m_configured(false)
     , m_callback(NULL)
     , m_nonFullscreenSize(1, 1)
@@ -80,6 +89,9 @@ WaylandWindow::~WaylandWindow()
     eglReleaseThread();
 
     // Wayland interfaces
+    if (m_pointer) {
+        wl_pointer_destroy(m_pointer);
+    }
     if (m_keyboard) {
         wl_keyboard_destroy(m_keyboard);
     }
@@ -342,6 +354,14 @@ void WaylandWindow::handleSeatCapabilities(
         wl_keyboard_destroy(self->m_keyboard);
         self->m_keyboard = NULL;
     }
+
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !self->m_pointer) {
+        self->m_pointer = wl_seat_get_pointer(seat);
+        wl_pointer_add_listener(self->m_pointer, &self->s_pointerListener, self);
+    } else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && self->m_pointer) {
+        wl_pointer_destroy(self->m_pointer);
+        self->m_pointer = NULL;
+    }
 }
 
 void WaylandWindow::handleSeatName(
@@ -412,6 +432,52 @@ void WaylandWindow::handleKeyboardRepeatInfo(void* data,
                                              struct wl_keyboard* keyboard,
                                              int32_t rate,
                                              int32_t delay)
+{
+}
+
+void WaylandWindow::handlePointerEnter(void* data,
+                                       struct wl_pointer* pointer,
+                                       uint32_t serial,
+                                       struct wl_surface* surface,
+                                       wl_fixed_t sx,
+                                       wl_fixed_t sy)
+{
+}
+
+void WaylandWindow::handlePointerLeave(void* data,
+                                       struct wl_pointer* pointer,
+                                       uint32_t serial,
+                                       struct wl_surface* surface)
+{
+}
+
+void WaylandWindow::handlePointerMotion(void* data,
+                                        struct wl_pointer* pointer,
+                                        uint32_t time,
+                                        wl_fixed_t sx,
+                                        wl_fixed_t sy)
+{
+}
+
+void WaylandWindow::handlePointerButton(void* data,
+                                        struct wl_pointer* pointer,
+                                        uint32_t serial,
+                                        uint32_t time,
+                                        uint32_t button,
+                                        uint32_t state)
+{
+    WaylandWindow* self = static_cast<WaylandWindow*>(data);
+
+    if (button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        wl_shell_surface_move(self->m_shellSurface, self->m_seat, serial);
+    }
+}
+
+void WaylandWindow::handlePointerAxis(void* data,
+                                      struct wl_pointer* pointer,
+                                      uint32_t time,
+                                      uint32_t axis,
+                                      wl_fixed_t value)
 {
 }
 

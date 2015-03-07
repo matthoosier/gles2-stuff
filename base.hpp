@@ -60,6 +60,7 @@ private:
     struct wl_shell* m_shell;
     struct wl_seat* m_seat;
     struct wl_keyboard* m_keyboard;
+    struct wl_pointer* m_pointer;
 
     // Callbacks
     static void handleRegistryGlobal(void* data, struct wl_registry* registry,
@@ -132,6 +133,37 @@ private:
                                          int32_t rate,
                                          int32_t delay);
 
+    static void handlePointerEnter(void* data,
+                                   struct wl_pointer* pointer,
+                                   uint32_t serial,
+                                   struct wl_surface* surface,
+                                   wl_fixed_t sx,
+                                   wl_fixed_t sy);
+
+    static void handlePointerLeave(void* data,
+                                   struct wl_pointer* pointer,
+                                   uint32_t serial,
+                                   struct wl_surface* surface);
+
+    static void handlePointerMotion(void* data,
+                                    struct wl_pointer* pointer,
+                                    uint32_t time,
+                                    wl_fixed_t sx,
+                                    wl_fixed_t sy);
+
+    static void handlePointerButton(void* data,
+                                    struct wl_pointer* pointer,
+                                    uint32_t serial,
+                                    uint32_t time,
+                                    uint32_t button,
+                                    uint32_t state);
+
+    static void handlePointerAxis(void* data,
+                                  struct wl_pointer* pointer,
+                                  uint32_t time,
+                                  uint32_t axis,
+                                  wl_fixed_t value);
+
     // Callback table structures
     static const struct wl_registry_listener s_registryListener;
     static const struct wl_callback_listener s_configureCallbackListener;
@@ -139,6 +171,7 @@ private:
     static const struct wl_shell_surface_listener s_shellSurfaceListener;
     static const struct wl_seat_listener s_seatListener;
     static const struct wl_keyboard_listener s_keyboardListener;
+    static const struct wl_pointer_listener s_pointerListener;
 
     // Client objects
     struct wl_surface* m_surface;
