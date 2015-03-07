@@ -32,8 +32,13 @@ public:
         GLint status;
 
         m_program = glCreateProgram();
-        glAttachShader(m_program, createShader(frag_shader_text, GL_FRAGMENT_SHADER));
-        glAttachShader(m_program, createShader(vert_shader_text, GL_VERTEX_SHADER));
+
+        m_fragShader = createShader(frag_shader_text, GL_FRAGMENT_SHADER);
+        glAttachShader(m_program, m_fragShader);
+
+        m_vertShader = createShader(vert_shader_text, GL_VERTEX_SHADER);
+        glAttachShader(m_program, m_vertShader);
+
         glLinkProgram(m_program);
 
         glGetProgramiv(m_program, GL_LINK_STATUS, &status);
@@ -97,10 +102,16 @@ public:
 
     virtual void teardownGl()
     {
+        glUseProgram(0);
+        glDeleteShader(m_fragShader);
+        glDeleteShader(m_vertShader);
+        glDeleteProgram(m_program);
     }
 
 private:
     GLuint m_program;
+    GLuint m_fragShader;
+    GLuint m_vertShader;
     GLuint m_pos;
     GLuint m_col;
     GLuint m_rotation;

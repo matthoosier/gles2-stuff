@@ -43,6 +43,8 @@ const struct wl_keyboard_listener WaylandWindow::s_keyboardListener = {
     &WaylandWindow::handleKeyboardRepeatInfo,
 };
 
+static bool s_running = true;
+
 WaylandWindow::WaylandWindow()
     : m_display(NULL)
     , m_registry(NULL)
@@ -60,6 +62,37 @@ WaylandWindow::WaylandWindow()
 
 WaylandWindow::~WaylandWindow()
 {
+    // EGL wrapper around surface
+    eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_CONTEXT, EGL_NO_CONTEXT);
+    eglDestroySurface(m_eglDisplay, m_eglSurface);
+    wl_egl_window_destroy(m_eglWindow);
+
+    // surface
+    wl_shell_surface_destroy(m_shellSurface);
+    wl_surface_destroy(m_surface);
+
+    if (m_callback) {
+        wl_callback_destroy(m_callback);
+    }
+
+    // EGL
+    eglTerminate(m_eglDisplay);
+    eglReleaseThread();
+
+    // Wayland interfaces
+    if (m_keyboard) {
+        wl_keyboard_destroy(m_keyboard);
+    }
+    if (m_seat) {
+        wl_seat_destroy(m_seat);
+    }
+    wl_shell_destroy(m_shell);
+    wl_compositor_destroy(m_compositor);
+    wl_registry_destroy(m_registry);
+
+    // Finally, the connection to the compositor
+    wl_display_flush(m_display);
+    wl_display_disconnect(m_display);
 }
 
 static void print_usage(FILE* stream, char* const argv[])
@@ -351,8 +384,17 @@ void WaylandWindow::handleKeyboardKey(void* data,
 {
     WaylandWindow* self = static_cast<WaylandWindow*>(data);
 
-    if (key == KEY_F11 && state) {
-        self->setFullscreen(!self->m_fullscreen);
+    switch (key) {
+        case KEY_F11:
+            if (state) {
+                self->setFullscreen(!self->m_fullscreen);
+            }
+            break;
+
+        case KEY_Q:
+        case KEY_ESC:
+            s_running = false;
+            break;
     }
 }
 
@@ -452,9 +494,11 @@ void WaylandWindow::redraw(struct wl_callback* callback, uint32_t time)
 
 void WaylandWindow::run()
 {
-    for (int ret = 0; ret != -1;) {
+    for (int ret = 0; ret != -1 && s_running;) {
         ret = wl_display_dispatch(m_display);
     }
+
+    teardownGl();
 }
 
 GLuint WaylandWindow::createShader(std::string const& shaderText, GLenum shaderType)
