@@ -294,6 +294,10 @@ handle_configure(void *data, struct wl_shell_surface *shell_surface,
 {
 	struct window *window = (struct window*)data;
 
+	// Ignore request to reconfigure to empty size
+	if (width < 1 || height < 1)
+		return;
+
 	if (window->native)
 		wl_egl_window_resize(window->native, width, height, 0, 0);
 

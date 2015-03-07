@@ -440,6 +440,11 @@ void WaylandWindow::handleConfigure(
 {
     WaylandWindow* self = static_cast<WaylandWindow*>(data);
 
+    // Ignore request to become 0x0
+    if (width < 1 || height < 1) {
+        return;
+    }
+
     if (self->m_eglWindow) {
         wl_egl_window_resize(self->m_eglWindow, width, height, 0, 0);
     }
