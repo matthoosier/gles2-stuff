@@ -1,8 +1,16 @@
 def options(opt):
     opt.load('compiler_c compiler_cxx')
 
+def add_compiler_flags(conf, flags):
+    for v in ('CFLAGS', 'CXXFLAGS'):
+        conf.env.append_value(v, flags)
+
 def configure(conf):
     conf.load('compiler_c compiler_cxx')
+
+    if conf.env.CC_NAME == 'gcc':
+        add_compiler_flags(conf, '-g')
+
     conf.check_cfg(package='wayland-client', args=['--cflags', '--libs'], uselib_store='WAYLAND_CLIENT')
     conf.check_cfg(package='wayland-egl', args=['--cflags', '--libs'], uselib_store='WAYLAND_EGL')
     conf.check_cfg(package='wayland-cursor', args=['--cflags', '--libs'], uselib_store='WAYLAND_CURSOR')
