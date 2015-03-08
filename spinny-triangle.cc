@@ -60,9 +60,9 @@ public:
     virtual void drawGl(uint32_t time)
     {
         static const GLfloat verts[3][2] = {
-            { -0.5, -0.5 },
-            {  0.5, -0.5 },
-            {  0,    0.5 }
+            { -0.866, -0.5 },
+            { +0.866, -0.5 },
+            {  0.000, +1.0 }
         };
         static const GLfloat colors[3][3] = {
             { 1, 0, 0 },
