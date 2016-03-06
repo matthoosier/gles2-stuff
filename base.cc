@@ -126,6 +126,7 @@ static WaylandWindow::Size parseSize(char const* value)
     strncpy(width_str, value, len);
 
     WaylandWindow::Size size(atoi(width_str), atoi(&strrchr(value, 'x')[1]));
+    delete[] width_str;
     return size;
 }
 
